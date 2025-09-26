@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bitácora Service Worker</title>
+</head>
+<body>
+    <h1>Bitácora Service Worker</h1>
+    <ul id="bitacora"></ul>
+
+    <script>
+        // Función para obtener fecha en formato dd-mm-yyyy-hh-mm-ss-ll
+        function obtenerFechaHora() {
+            const ahora = new Date();
+            const dd = String(ahora.getDate()).padStart(2, '0');
+            const mm = String(ahora.getMonth() + 1).padStart(2, '0');
+            const yyyy = ahora.getFullYear();
+            const hh = String(ahora.getHours()).padStart(2, '0');
+            const min = String(ahora.getMinutes()).padStart(2, '0');
+            const ss = String(ahora.getSeconds()).padStart(2, '0');
+            const ll = String(ahora.getMilliseconds()).padStart(3, '0');
+            
+            return `${dd}-${mm}-${yyyy}-${hh}-${min}-${ss}-${ll}`;
+        }
+
+        // Función para agregar evento a la bitácora
+        function agregarEvento(evento, estado) {
+            const lista = document.getElementById('bitacora');
+            const item = document.createElement('li');
+            item.textContent = `${evento} - ${estado} - ${obtenerFechaHora()}`;
+            lista.appendChild(item);
+            
+            // Guardar en localStorage para persistencia
+            const eventos = JSON.parse(localStorage.getItem('bitacora_sw')) || [];
+            eventos.push({evento, estado, fecha: obtenerFechaHora()});
+            localStorage.setItem('bitacora_sw', JSON.stringify(eventos));
+        }
+
+        // Cargar eventos guardados al iniciar
+        function cargarEventosGuardados() {
+            const eventos = JSON.parse(localStorage.getItem('bitacora_sw')) || [];
+            const lista = document.getElementById('bitacora');
+            
+            eventos.forEach(evento => {
+                const item = document.createElement('li');
+                item.textContent = `${evento.evento} - ${evento.estado} - ${evento.fecha}`;
+                lista.appendChild(item);
+            });
+        }
+
+        // Registrar Service Worker automáticamente
+        function registrarServiceWorker() {
+            if ('serviceWorker' in navigator) {
+                agregarEvento('INSTALANDO', 'Iniciando registro...');
+                
+                navigator.serviceWorker.register('./sw.js')
+                    .then(registration => {
+                        agregarEvento('INSTALADO', 'SW registrado exitosamente');
+                        
+                        // Monitorear cambios de estado
+                        if (registration.installing) {
+                            registration.installing.addEventListener('statechange', e => {
+                                agregarEvento('ESPERANDO', `Estado: ${e.target.state}`);
+                            });
+                        }
+                        
+                        // Escuchar mensajes del SW
+                        navigator.serviceWorker.addEventListener('message', event => {
+                            if (event.data && event.data.tipo === 'BITACORA') {
+                                agregarEvento(event.data.evento, event.data.estado);
+                            }
+                        });
+                    })
+                    .catch(error => {
+                        agregarEvento('ERROR', `Error: ${error.message}`);
+                    });
+            } else {
+                agregarEvento('ERROR', 'Service Worker no soportado');
+            }
+        }
+
+        // Inicializar cuando la página cargue
+        document.addEventListener('DOMContentLoaded', () => {
+            cargarEventosGuardados();
+            registrarServiceWorker();
+        });
+    </script>
+</body>
+</html>
